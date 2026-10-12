@@ -678,7 +678,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
 --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:#e9ecea;color:var(--ink);font-family:var(--font)}
-#map{position:fixed;inset:0}
+/* The map is a square as big as the screen's diagonal, centred, so it still covers the screen when turned to face the direction of travel. */
+#map{position:fixed;left:0;top:0;width:100vw;height:100vh;transform:rotate(var(--rot,0deg));transition:transform .6s ease-out}
+.upright svg{transform:rotate(calc(-1 * var(--rot,0deg)));transition:transform .6s ease-out}
+.upright.light svg{transform-origin:50% 100%}
+.upright.disc svg{transform-origin:50% 50%}
+#compass svg{transform:rotate(var(--rot,0deg));transition:transform .6s ease-out}
+.snap #map,.snap .upright svg,.snap #compass svg,.snap .me{transition:none!important}
+.attrib{font-size:10px;color:var(--ink2);text-align:right;margin-top:4px}
+.attrib a{color:inherit}
 .panel{position:fixed;left:0;right:0;bottom:0;z-index:1000;background:var(--paper);border-radius:16px 16px 0 0;
  box-shadow:0 -6px 24px rgba(0,0,0,.18);padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}
 .top{position:fixed;left:12px;right:12px;top:calc(10px + env(safe-area-inset-top,0px));z-index:1000;display:flex;gap:8px;align-items:center}
@@ -696,10 +704,10 @@ html,body{height:100%;margin:0;background:#e9ecea;color:var(--ink);font-family:v
 .go{background:var(--ink);color:#fff}
 .ghost{background:#eef2f0;color:var(--ink);flex:0 0 64px}
 .status{font-size:13px;color:var(--ink2);margin-top:8px;min-height:1.2em}
-.status.warn{color:var(--warn);font-weight:600}
+.status.warn{color:var(--warn);font-weight:600;font-size:14px;background:#fdecea;border-radius:10px;padding:8px 10px}
 .lvl{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1.5px solid currentColor;border-radius:99px;padding:1px 8px;margin-left:6px;vertical-align:2px}
 .lvl.upper{color:var(--upper)} .lvl.lower{color:var(--lower)}
-.me{width:18px;height:18px;border-radius:50%;background:var(--me);border:3px solid #fff;box-shadow:0 0 0 2px rgba(26,115,232,.35)}
+.me{width:34px;height:34px;transition:transform .6s ease-out;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))}
 .lightpin{filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
 .steps{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.4);display:flex;align-items:flex-end}
 .steps .sheet{background:var(--paper);width:100%;max-height:80%;overflow:auto;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
@@ -710,7 +718,6 @@ html,body{height:100%;margin:0;background:#e9ecea;color:var(--ink);font-family:v
 .steps li b{display:block}
 .steps li span{color:var(--ink2);font-size:14px}
 [hidden]{display:none!important}
-.leaflet-control-attribution{font-size:10px}
 </style>
 </head>
 <body>
@@ -719,6 +726,7 @@ html,body{height:100%;margin:0;background:#e9ecea;color:var(--ink);font-family:v
 <div class="top">
   <div class="title">Rosewood Loading Bay Route<small>Al Maryah Island · 6 traffic lights</small></div>
   <button class="iconbtn" id="list" aria-label="All steps">☰</button>
+  <button class="iconbtn" id="compass" aria-label="Turn map to face your direction" aria-pressed="true" title="Map turns with you · tap for north up"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,2 16.5,12 7.5,12" fill="#d92d20"/><polygon points="7.5,12 16.5,12 12,22" fill="#9aa5a1"/></svg></button>
   <button class="iconbtn" id="recenter" aria-label="Centre on me">◎</button>
 </div>
 
@@ -737,6 +745,7 @@ html,body{height:100%;margin:0;background:#e9ecea;color:var(--ink);font-family:v
     <button class="btn ghost" id="nextb" aria-label="Next step">›</button>
   </div>
   <div class="status" id="status">Tap Start navigation and allow location.</div>
+  <div class="attrib">Map © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
 </div>
 
 <div class="steps" id="steps" hidden>
@@ -784,7 +793,13 @@ function badgeFor(s){
 
 // --- map
 var ll = function(p){ return [p[1], p[0]]; };
-var map = L.map('map', {zoomControl:false, attributionControl:true}).setView([24.4962, 54.3888], 17);
+var $ = function(id){ return document.getElementById(id); };
+function sizeMap(){
+  var W = innerWidth, H = innerHeight, D = Math.ceil(Math.hypot(W, H)), el = $('map');
+  el.style.width = el.style.height = D+'px'; el.style.left = ((W-D)/2)+'px'; el.style.top = ((H-D)/2)+'px';
+}
+sizeMap();
+var map = L.map('map', {zoomControl:false, attributionControl:false}).setView([24.4962, 54.3888], 17);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:20, maxNativeZoom:19, subdomains:'abc',
   attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 // the lower road runs under Hamouda Bin Ali Al Dhaheri St; draw it a few metres east so both lines show
@@ -795,10 +810,16 @@ L.polyline(UPPER.map(ll), {color:'#ffffff', weight:11, opacity:.9}).addTo(map);
 L.polyline(UPPER.map(ll), {color:'#1d5fc4', weight:6}).addTo(map);
 STEPS.forEach(function(s, i){
   var num = typeof s.k==='number';
-  var icon = L.divIcon({className:'lightpin', html:badgeFor(s), iconSize: num?[25,62]:[38,38], iconAnchor: num?[12.5,62]:[19,19]});
+  var icon = L.divIcon({className:'lightpin upright '+(num?'light':'disc'), html:badgeFor(s), iconSize: num?[25,62]:[38,38], iconAnchor: num?[12.5,62]:[19,19]});
   L.marker(ll(s.at), {icon:icon, title:s.t, keyboard:false}).addTo(map).bindPopup('<b>'+s.t+'</b><br>'+s.p);
 });
-map.fitBounds(L.latLngBounds(UPPER.concat(LOWER).map(ll)).pad(0.08));
+// fit the route into the part of the screen between the title and the bottom panel (the map itself is bigger than the screen)
+function fitRoute(){
+  var D = $('map').offsetWidth, px = (D-innerWidth)/2, py = (D-innerHeight)/2;
+  var top = document.querySelector('.top').getBoundingClientRect().bottom, panel = innerHeight - document.querySelector('.panel').getBoundingClientRect().top;
+  map.fitBounds(L.latLngBounds(UPPER.concat(LOWER).map(ll)), {paddingTopLeft:[px+16, py+top+12], paddingBottomRight:[px+16, py+panel+12]});
+}
+fitRoute();
 
 // --- geometry (local metres)
 var R = UPPER.concat(LOWER.slice(1));
@@ -819,11 +840,18 @@ function project(pt, lo, hi){ // best along-route position within [lo,hi] metres
   }
   return best;
 }
+function pointAt(s){
+  s = Math.max(0, Math.min(TOTAL, s));
+  for (var i=0;i<P.length-2 && CUM[i+1]<s;i++);
+  var t = (s-CUM[i])/((CUM[i+1]-CUM[i])||1);
+  return [P[i][0]+t*(P[i+1][0]-P[i][0]), P[i][1]+t*(P[i+1][1]-P[i][1])];
+}
+function bearingXY(a, b){ return Math.atan2(b[0]-a[0], b[1]-a[1])*180/Math.PI; } // degrees clockwise from north
+function routeBearing(s){ var a = Math.min(s, TOTAL-30); return bearingXY(pointAt(a), pointAt(a+30)); }
 var prevS=0; STEPS.forEach(function(s){ s.s = project(s.at, prevS, TOTAL).s; prevS = s.s; });
 
 // --- state & UI
-var cur = 0, along = 0, watching = null, follow = true, meMarker = null, accCircle = null, lastFix = 0, wake = null;
-var $ = function(id){ return document.getElementById(id); };
+var heading = 0, headingUp = true, lastP = null, movedFrom = null, startedAt = 0, cur = 0, along = 0, watching = null, follow = true, meMarker = null, accCircle = null, lastFix = 0, wake = null;
 function fmt(m){ return m<20 ? 'Now' : (m<1000 ? (Math.round(m/10)*10)+' m' : (m/1000).toFixed(1)+' km'); }
 function render(dist){
   var s = STEPS[cur];
@@ -837,45 +865,109 @@ function render(dist){
 $('steplist').innerHTML = STEPS.map(function(s){ return '<li><div style="width:30px;display:grid;place-items:center">'+badgeFor(s).replace(/width="[\d.]+" height="[\d.]+"/,'width="22" height="34"')+'</div><div><b>'+s.t+'</b><span>'+s.p+'</span></div></li>'; }).join('');
 function setStep(i, fromUser){ cur = Math.max(0, Math.min(STEPS.length-1, i)); if (fromUser){ along = Math.max(STEPS[Math.max(0,cur-1)].s, 0); if(!watching) map.panTo(ll(STEPS[cur].at)); } render(watching? STEPS[cur].s-along : null); }
 
+// Heading up: turn the map so the direction of travel points up the screen, like a sat-nav.
+// heading only ever changes by the short way round, so the map never spins the long way.
+function rotating(){ return headingUp && follow && !!watching && !!lastP; }
+function applyRotation(){
+  var rot = rotating() ? -heading : 360*Math.round(-heading/360);
+  document.documentElement.style.setProperty('--rot', rot+'deg');
+  $('compass').setAttribute('aria-pressed', headingUp ? 'true' : 'false');
+}
+function setHeading(h){ heading += ((h - heading) % 360 + 540) % 360 - 180; }
+function snap(){ var r = document.documentElement; r.classList.add('snap'); void r.offsetWidth; setTimeout(function(){ r.classList.remove('snap'); }, 50); }
+function followView(p){
+  var z = Math.max(map.getZoom(), 18);
+  if (!rotating()){ map.setView(ll(p), z, {animate:true}); return; }
+  // keep your arrow low on the screen so you see more of the road ahead
+  var top = document.querySelector('.top').getBoundingClientRect().bottom, bottom = document.querySelector('.panel').getBoundingClientRect().top;
+  var dy = top + (bottom-top)*0.75 - innerHeight/2, r = heading*Math.PI/180;
+  var c = map.project(ll(p), z).add(L.point(dy*Math.sin(r), -dy*Math.cos(r)));
+  map.setView(map.unproject(c, z), z, {animate:true});
+}
+function stopFollowing(){ if (!follow) return; follow = false; snap(); applyRotation(); }
+
 function status(msg, warn){ var el=$('status'); el.textContent=msg; el.className='status'+(warn?' warn':''); }
 
 function onFix(pos){
   var p=[pos.coords.longitude, pos.coords.latitude], acc=pos.coords.accuracy||0; lastFix=Date.now();
-  if (!meMarker){ meMarker=L.marker(ll(p),{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[24,24],iconAnchor:[12,12]}),zIndexOffset:1000}).addTo(map);
+  if (!meMarker){ meMarker=L.marker(ll(p),{icon:L.divIcon({className:'',html:'<div class="me"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="14" fill="#1a73e8" stroke="#fff" stroke-width="3"/><path d="M17 7 L24 25 L17 21 L10 25 Z" fill="#fff"/></svg></div>',iconSize:[34,34],iconAnchor:[17,17]}),zIndexOffset:1000,keyboard:false,interactive:false}).addTo(map);
                   accCircle=L.circle(ll(p),{radius:acc,color:'#1a73e8',weight:1,fillOpacity:.08}).addTo(map); }
   meMarker.setLatLng(ll(p)); accCircle.setLatLng(ll(p)).setRadius(acc);
   var pr = project(p, Math.max(0, along-60), along+450);
   if (pr.d > 70){ var g = project(p, 0, TOTAL); if (g.d < pr.d - 30) pr = g; }
   if (pr.d <= 70) along = Math.max(along, pr.s);
   while (cur < STEPS.length-1 && along > STEPS[cur].s - 15) cur++;
+  // direction of travel: the road's direction when you're on the route (steady, and works with weak GPS on the lower level),
+  // otherwise the phone's heading while moving, otherwise the direction you've moved since the last few metres
+  var c = pos.coords, moved = movedFrom ? Math.hypot(xy(p)[0]-xy(movedFrom)[0], xy(p)[1]-xy(movedFrom)[1]) : 0;
+  if (pr.d <= 70) setHeading(routeBearing(along));
+  else if (c.heading != null && !isNaN(c.heading) && (c.speed||0) > 1.5) setHeading(c.heading);
+  else if (moved > 8) setHeading(bearingXY(xy(movedFrom), xy(p)));
+  if (!movedFrom || moved > 8) movedFrom = p;
+  lastP = p;
+  meMarker.getElement().firstChild.style.transform = 'rotate('+heading+'deg)';
+  applyRotation();
   if (pr.d > 70) status('You are about '+Math.round(pr.d)+' m from the route. Head back to the line on the map.', true);
   else if (acc > 60) status('Weak GPS signal (±'+Math.round(acc)+' m). On the lower level, follow the traffic lights and use › to move on.', true);
   else status('Following you · '+fmt(Math.max(0,TOTAL-along))+' to the loading bay', false);
   render(Math.max(0, STEPS[cur].s - along));
-  if (follow) map.setView(ll(p), Math.max(map.getZoom(), 18), {animate:true});
+  if (follow) followView(p);
+}
+var IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+function blockedHelp(){
+  return IOS
+    ? 'Location is blocked, so the map can\'t follow you. On iPhone: Settings › Privacy & Security › Location Services: turn it on, then Safari Websites › While Using the App. Reload this page and tap Start navigation again.'
+    : 'Location is blocked, so the map can\'t follow you. Tap the icon left of the web address › Permissions › Location › Allow, and make sure your phone\'s Location is on. Reload and tap Start navigation again.';
 }
 function onErr(e){
-  if (e.code===1) status('Location is blocked. Allow location for this page in your browser settings, or use ‹ › to step through.', true);
-  else status('Waiting for GPS… You can use ‹ › to step through the route.', true);
+  if (e.code===1) status(blockedHelp(), true);
+  else if (!lastFix) status('Still looking for GPS… Make sure Location is on for your phone. You can use ‹ › to step through the route.', true);
+}
+// Location only works on a secure (https) page opened directly, not inside a preview frame.
+function locationProblem(){
+  var framed = false; try { framed = window.top !== window.self; } catch(e){ framed = true; }
+  if (framed) return 'This page is shown inside another site, which blocks your location. Open the page\'s own address directly.';
+  if (!window.isSecureContext) return 'This link opened the page without https, so the phone won\'t share your location. Open the https:// address of this page instead.';
+  if (!('geolocation' in navigator)) return 'This browser has no location access. Open the link in Safari or Chrome, or use ‹ › to step through.';
+  return null;
 }
 async function keepAwake(){ try{ if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); }catch(e){} }
 document.addEventListener('visibilitychange', function(){ if (watching && document.visibilityState==='visible') keepAwake(); });
 
 $('start').onclick = function(){
-  if (watching){ navigator.geolocation.clearWatch(watching); watching=null; $('start').textContent='Start navigation'; status('Navigation paused.'); try{wake&&wake.release();}catch(e){} render(null); return; }
-  if (!('geolocation' in navigator)){ status('This browser has no location access. Use ‹ › to step through.', true); return; }
+  if (watching){ navigator.geolocation.clearWatch(watching); watching=null; applyRotation(); $('start').textContent='Start navigation'; status('Navigation paused.'); try{wake&&wake.release();}catch(e){} render(null); return; }
+  var problem = locationProblem(); if (problem){ status(problem, true); return; }
+  startedAt = Date.now(); lastFix = 0;
   watching = navigator.geolocation.watchPosition(onFix, onErr, {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
   $('start').textContent='Stop'; follow=true; status('Finding your location…'); keepAwake();
 };
 $('nextb').onclick = function(){ setStep(cur+1, true); };
 $('prev').onclick = function(){ setStep(cur-1, true); };
-$('recenter').onclick = function(){ follow=true; if (meMarker) map.setView(meMarker.getLatLng(), 18); else map.fitBounds(L.latLngBounds(R.map(ll)).pad(0.08)); };
-map.on('dragstart', function(){ follow=false; });
+$('recenter').onclick = function(){ follow=true; applyRotation(); if (lastP) followView(lastP); else fitRoute(); };
+$('compass').onclick = function(){ headingUp = !headingUp; if (headingUp) follow = true; applyRotation(); if (lastP && follow) followView(lastP);
+  $('compass').title = headingUp ? 'Map turns with you · tap for north up' : 'North up · tap to turn the map with you'; };
+map.on('dragstart', stopFollowing);
+// The map can only be dragged or pinched the right way round while it isn't turned, so straighten it
+// (north up, stop following) as soon as you touch a marker or start moving the map; ◎ goes back to following.
+var downAt = null, fingers = 0;
+document.addEventListener('pointerdown', function(e){
+  if (!$('map').contains(e.target)) return;
+  fingers++;
+  if (!rotating()) return;
+  if (fingers > 1 || e.target.closest('.leaflet-marker-icon')) { downAt = null; stopFollowing(); }
+  else downAt = [e.clientX, e.clientY];
+}, true);
+document.addEventListener('pointermove', function(e){ if (downAt && Math.hypot(e.clientX-downAt[0], e.clientY-downAt[1]) > 6){ downAt = null; stopFollowing(); } }, true);
+['pointerup','pointercancel'].forEach(function(t){ document.addEventListener(t, function(){ fingers = Math.max(0, fingers-1); downAt = null; }, true); });
+addEventListener('resize', function(){ sizeMap(); map.invalidateSize(); if (lastP && follow) followView(lastP); });
 $('list').onclick = function(){ $('steps').hidden=false; };
 $('closeSteps').onclick = function(){ $('steps').hidden=true; };
 $('steps').addEventListener('click', function(e){ if (e.target.id==='steps') $('steps').hidden=true; });
-setInterval(function(){ if (watching && lastFix && Date.now()-lastFix > 20000) status('GPS signal lost (common on the lower level). Follow the traffic lights; tap › at each one.', true); }, 5000);
+setInterval(function(){ if (watching && !lastFix && Date.now()-startedAt > 12000) status('No location yet. '+blockedHelp().replace(/^Location is blocked, so the map can.t follow you\. /,'If you weren\'t asked to share your location, check this: '), true);
+  else if (watching && lastFix && Date.now()-lastFix > 20000) status('GPS signal lost (common on the lower level). Follow the traffic lights; tap › at each one.', true); }, 5000);
 render(null);
+(function(){ var problem = locationProblem(); if (problem) status(problem, true); })();
+if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({name:'geolocation'}).then(function(r){ if (r.state==='denied') status(blockedHelp(), true); }).catch(function(){});
 })();
 </script>
 </body>
